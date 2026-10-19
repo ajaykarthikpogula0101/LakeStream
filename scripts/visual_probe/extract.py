@@ -147,8 +147,11 @@ async def process(url: str, out_root: Path, seed: int | None, hooks_model: str) 
     status = {"reached": "reached", "stopped_wall": "blocked", "error": "failed"}.get(
         trace.get("outcome"), "partial")
     hooks: dict = {"hooks": []}
-    if status != "blocked":
-        hooks = await outreach_hooks(facts, hooks_model, api_key)
+    if status != "blocked" and api_key:
+        try:
+            hooks = await outreach_hooks(facts, hooks_model, api_key)
+        except Exception as exc:  # a hook failure must not lose the page's facts
+            hooks = {"hooks": [], "error": f"{type(exc).__name__}: {exc}"[:300]}
     record = {
         "url": url,
         "status": status,
@@ -168,6 +171,14 @@ async def process(url: str, out_root: Path, seed: int | None, hooks_model: str) 
     facts_path = out_root / f"{slug(url)}.facts.json"
     facts_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
     return record
+
+
+def write_benchmark(out_root: Path, rows: list[dict]) -> None:
+    with (out_root / "benchmark.csv").open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        w.writeheader()
+        w.writerows(rows)
+    (out_root / "benchmark.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
 
 
 def main() -> int:
@@ -203,12 +214,8 @@ def main() -> int:
         }
         rows.append(row)
         print(json.dumps(row), flush=True)
+        write_benchmark(out_root, rows)  # after every URL, so a crash keeps earlier rows
 
-    with (out_root / "benchmark.csv").open("w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
-        w.writeheader()
-        w.writerows(rows)
-    (out_root / "benchmark.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
     statuses = ("reached", "blocked", "partial", "failed")
     counts = {s: sum(r["status"] == s for r in rows) for s in statuses}
     print("\nsummary:", json.dumps(counts), "| out:", out_root)

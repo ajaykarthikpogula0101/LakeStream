@@ -23,6 +23,7 @@ import asyncio
 import csv
 import json
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -79,7 +80,7 @@ def main() -> int:
         print(f"=== {url} (direct)", flush=True)
         d = asyncio.run(one(url, out_root / "direct", args.seed, None, ""))
         row.update({f"direct_{k}": v for k, v in d.items()})
-        asyncio.run(asyncio.sleep(args.pause_s))
+        time.sleep(args.pause_s)
         if proxy:
             print(f"=== {url} (proxy)", flush=True)
             p = asyncio.run(one(url, out_root / "proxy", args.seed, proxy, ""))
@@ -87,7 +88,7 @@ def main() -> int:
             if args.cost_per_gb and p.get("html_bytes") and p.get("outcome") == "ok":
                 # HTML only; images/scripts also count on a real bill, so this is a floor.
                 row["proxy_cost_floor_usd"] = round(p["html_bytes"] / 1e9 * args.cost_per_gb, 6)
-            asyncio.run(asyncio.sleep(args.pause_s))
+            time.sleep(args.pause_s)
         else:
             row["proxy_outcome"] = "not_configured"
         rows.append(row)

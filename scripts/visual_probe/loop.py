@@ -30,6 +30,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import sys
 import time
 from datetime import UTC, datetime
@@ -50,11 +51,12 @@ ACTIVITY_LINKS_JS = """
     const r = a.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) continue;
     const href = a.href || '';
+    const attr = a.getAttribute('href') || '';
     const text = (a.innerText || '').trim().slice(0, 60);
     const byHref = /\\/posts\\/?(\\?|$)|recent-activity/i.test(href);
     const byText = /^(posts|activity|show all posts)$/i.test(text);
     if (byHref || byText) {
-      out.push({href, text, visible: r.top >= 0 && r.top < window.innerHeight});
+      out.push({href, attr, text, visible: r.top >= 0 && r.top < window.innerHeight});
     }
   }
   return out.slice(0, 10);
@@ -95,7 +97,8 @@ async def page_state(page) -> dict:
         ),
         "activity_links": links,
         "dismiss_selector": dismiss,
-        "body_text": (await page.evaluate("document.body.innerText"))[:2000],
+        "body_text": (await page.evaluate("document.body ? document.body.innerText : ''")
+                      or "")[:2000],
     }
 
 
@@ -149,7 +152,7 @@ def jev_body(state: dict, observations: dict | None, history: list[dict], action
     if feedback:
         rules.append(feedback)
     return {
-        "model": probe_jev.os.environ.get("TYPESAFE_MODEL", "jev-latest"),
+        "model": os.environ.get("TYPESAFE_MODEL", "jev-latest"),
         "state": {
             "page": {"url": state["url"], "title": state["title"], "text": text},
             "elements": [
@@ -178,7 +181,9 @@ async def execute(page, decision: str, state: dict) -> str:
         return "scrolled one screen"
     if decision == "CLICK_ACTIVITY":
         target = state["activity_links"][0]
-        await page.click(f'a[href="{target["href"]}"]', timeout=10_000)
+        # Match the raw href attribute (LinkedIn's are relative); a.href is absolute.
+        attr = target["attr"].replace("\\", "\\\\").replace('"', '\\"')
+        await page.locator(f'a[href="{attr}"]').first.click(timeout=10_000)
         try:
             await page.wait_for_load_state("networkidle", timeout=10_000)
         except Exception:
@@ -200,9 +205,6 @@ async def run(url: str, out_dir: Path, *, seed: int | None, headless: bool, visi
 
     openrouter_key = probe_vision._api_key()
     jev_key = probe_jev._api_key()
-    if not openrouter_key or not jev_key:
-        return {"outcome": "error", "error": "OPENROUTER_API_KEY and TYPESAFE_API_KEY are required"}
-
     out_dir.mkdir(parents=True, exist_ok=True)
     trace: dict = {
         "url": url, "started_at": datetime.now(UTC).isoformat(), "seed": seed,
@@ -213,8 +215,10 @@ async def run(url: str, out_dir: Path, *, seed: int | None, headless: bool, visi
     }
     t0 = time.time()
     no_progress = 0
-    ip = InvisiblePlaywright(seed=seed, headless=headless)
     try:
+        if not openrouter_key or not jev_key:
+            raise ValueError("OPENROUTER_API_KEY and TYPESAFE_API_KEY are required")
+        ip = InvisiblePlaywright(seed=seed, headless=headless)
         async with ip as browser:
             trace["seed"] = ip.seed
             page = await browser.new_page()
@@ -316,6 +320,13 @@ async def run(url: str, out_dir: Path, *, seed: int | None, headless: bool, visi
                         f"are visible yet and the page is only {pct}% scrolled. Choose again."
                     )
                     decision = step["jev"].get("decision")
+                if (step["jev"].get("http_status") or 0) >= 400 or step["jev"].get("error_body"):
+                    step["decision"] = "STOP"
+                    step["note"] = f"Jev HTTP {step['jev'].get('http_status')}"
+                    trace["steps"].append(step)
+                    trace["outcome"] = "error"
+                    trace["error"] = f"{step['note']}: {step['jev'].get('error_body')}"[:300]
+                    return trace
                 if decision not in actions:
                     step["decision"] = "STOP"
                     step["note"] = f"invalid/unavailable choice {decision!r}"
