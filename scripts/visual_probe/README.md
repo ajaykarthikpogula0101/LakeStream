@@ -12,6 +12,8 @@ database or default scraping path. Measured results for 2026-10-19 are in
 | 2 | `probe_vision.py` | a vision model turns that screenshot into structured observations | `OPENROUTER_API_KEY` |
 | 3 | `probe_jev.py` | Jev picks one bounded action from the observations | `TYPESAFE_API_KEY` |
 | L2 | `loop.py` | the whole loop: screenshot → vision → Jev → act → screenshot → verify, with hard budgets and a trace | both keys |
+| L3 | `extract.py` | runs the loop on N URLs, merges every step's observations into cited facts (source URL, capture time, screenshot), adds up to 2 outreach hooks tied to evidence, writes `benchmark.csv` | both keys |
+| L4 | `proxy_compare.py` | same URLs direct vs one sticky proxy session; time, bytes, outcome, cost floor | `VISUAL_PROBE_PROXY_*` env for the proxy leg |
 
 ## The loop (L2)
 
@@ -30,9 +32,43 @@ answer stands. Every step is written to `trace.json` with the before/after
 PNGs, the full vision observations, Jev's probabilities and confidence,
 latency and cost.
 
+Before the first screenshot the loop closes a dismissible sign-in overlay if
+one sits on top of public content (`button.sign-in-modal__dismiss` on
+LinkedIn). That is UI hygiene, recorded as `pre_step` in the trace, not a
+navigation decision for Jev. Without it the modal covers the middle of every
+screenshot and post text under it is read garbled.
+
 ```powershell
 python scripts/visual_probe/loop.py https://www.linkedin.com/company/microsoft/ --seed 7
 ```
+
+## Cited extraction and benchmark (L3)
+
+```powershell
+python scripts/visual_probe/extract.py URL1 URL2 URL3 URL4 URL5
+```
+
+Per URL: `<slug>/` (trace + PNGs) and `<slug>.facts.json`. Every non-empty
+fact is `{value, source_url, captured_at, screenshot}`; posts and other facts
+get ids (`post1`, `fact2`) that the hooks must reference. Topics are marked
+`observed`; no personal traits are inferred. Hooks are labelled
+"suggestion, not sent" and carry `evidence_valid`. `benchmark.csv` has one
+row per URL with reached / blocked / partial / failed and field counts.
+Extraction makes no extra vision calls: it merges the observations the loop
+already recorded. One small text call per page writes the hooks.
+
+## Direct vs proxy (L4)
+
+```powershell
+$env:VISUAL_PROBE_PROXY_SERVER   = "http://host:port"     # or socks5://
+$env:VISUAL_PROBE_PROXY_USERNAME = "..."
+$env:VISUAL_PROBE_PROXY_PASSWORD = "..."
+python scripts/visual_probe/proxy_compare.py https://example.com https://www.linkedin.com/company/microsoft/ --cost-per-gb 3
+```
+
+One sticky session, same seed and pace on both legs, no rotation. Without
+the env vars only the direct leg runs and the proxy column says
+`not_configured`.
 
 ## Browser choice
 

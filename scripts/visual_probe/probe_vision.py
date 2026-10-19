@@ -73,20 +73,22 @@ def _api_key() -> str | None:
 async def observe(png: Path, model: str, api_key: str, max_tokens: int) -> dict:
     from openai import AsyncOpenAI
 
-    client = AsyncOpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL, timeout=60)
     data_url = "data:image/png;base64," + base64.b64encode(png.read_bytes()).decode()
     t0 = time.time()
-    resp = await client.chat.completions.create(
-        model=model,
-        max_tokens=max_tokens,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": PROMPT},
-                {"type": "image_url", "image_url": {"url": data_url}},
-            ],
-        }],
-    )
+    # Close the client inside the running loop; otherwise its transport is torn
+    # down after asyncio.run() exits and logs "Event loop is closed".
+    async with AsyncOpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL, timeout=60) as client:
+        resp = await client.chat.completions.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": PROMPT},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }],
+        )
     latency_ms = int((time.time() - t0) * 1000)
     text = resp.choices[0].message.content or ""
     usage = resp.usage.model_dump() if resp.usage else None

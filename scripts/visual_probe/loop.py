@@ -61,8 +61,9 @@ ACTIVITY_LINKS_JS = """
 }
 """
 DISMISS_SELECTORS = [
-    'button[aria-label="Dismiss"]',
+    "button.sign-in-modal__dismiss",  # LinkedIn's contextual sign-in modal
     "button.modal__dismiss",
+    'button[aria-label="Dismiss"]',
     'button[aria-label="Close"]',
 ]
 GOAL_URL_HINT = ("/posts", "recent-activity")
@@ -74,11 +75,16 @@ def _sha(data: bytes) -> str:
 
 async def page_state(page) -> dict:
     links = await page.evaluate(ACTIVITY_LINKS_JS)
+    # Several hidden Dismiss buttons can precede the visible one in DOM order
+    # (LinkedIn's app-upsell toast), so every match is checked for visibility.
     dismiss = None
     for sel in DISMISS_SELECTORS:
         loc = page.locator(sel)
-        if await loc.count() and await loc.first.is_visible():
-            dismiss = sel
+        for i in range(await loc.count()):
+            if await loc.nth(i).is_visible():
+                dismiss = f"{sel} >> nth={i}"
+                break
+        if dismiss:
             break
     return {
         "url": page.url,
@@ -227,6 +233,19 @@ async def run(url: str, out_dir: Path, *, seed: int | None, headless: bool, visi
                 trace["outcome"] = "stopped_wall"
                 trace["reason"] = f"landing page classified {outcome}: {signals}"
                 return trace
+
+            # Pre-step: close a dismissible sign-in overlay sitting on public
+            # content so the screenshots show the page, not the pop-up. This is
+            # UI hygiene (a click on Dismiss), not a navigation decision, so it
+            # is done deterministically and recorded rather than asked of Jev.
+            pre = await page_state(page)
+            if pre["dismiss_selector"]:
+                try:
+                    await page.click(pre["dismiss_selector"], timeout=5_000)
+                    await page.wait_for_timeout(800)
+                    trace["pre_step"] = {"closed_popup": pre["dismiss_selector"]}
+                except Exception as exc:
+                    trace["pre_step"] = {"close_failed": f"{type(exc).__name__}: {exc}"[:160]}
 
             for step_no in range(1, max_steps + 1):
                 if time.time() - t0 > budget_s:
