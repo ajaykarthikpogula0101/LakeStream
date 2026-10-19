@@ -39,7 +39,10 @@ PROMPT = """You are looking at a screenshot of a public web page.
 Report ONLY what is visibly on the page. Do not guess or infer anything that is not shown.
 Return a single JSON object with these keys (use null when not visible):
   page_type: "person_profile" | "company_page" | "post" | "login_wall" | "captcha" | "other"
-  login_or_access_wall: true/false
+  login_or_access_wall: true ONLY when the page content itself is replaced by a sign-in,
+    sign-up, CAPTCHA or access-denied page. A pop-up or overlay sitting on top of still
+    visible content is NOT a wall: set this false and set signin_popup_present true.
+  signin_popup_present: true/false
   name, headline_or_role, company, location
   about_or_bio: visible bio text, at most 300 characters, or null
   recent_posts: up to 5 items of {text_excerpt (max 200 chars), date_label_as_shown}

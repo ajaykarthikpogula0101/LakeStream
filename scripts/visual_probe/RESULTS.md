@@ -49,6 +49,35 @@ the page. The action set is bounded to open/click/scroll/back/stop.
   CAPTCHA markers as a block only alongside a challenge title, a block
   status or a tiny page.
 
+## L2: screenshot-guided loop (same day, direct IP, logged out)
+
+| URL | Outcome | Steps | Time | Model calls | Vision cost | Jev input tokens |
+|---|---|---|---|---|---|---|
+| linkedin.com/company/microsoft | reached posts | SCROLL, SCROLL, goal | 42 s | 5 | $0.0012 | 2.9k |
+| linkedin.com/company/google | reached posts | SCROLL, SCROLL, goal | 50 s | 5 | $0.0006 | 2.9k |
+| linkedin.com/company/amazon | reached posts | SCROLL (after re-ask), goal | 35 s | 4 | $0.0006 | 2.9k |
+| linkedin.com/company/apple | end of page, no posts section on the public page | SCROLL ×4 | 46 s | 8 | $0.0007 | 5.7k |
+| linkedin.com/in/satyanadella | stopped at landing: 999 → authwall | 0 | 13 s | 0 | $0 | 0 |
+
+Journeys that reach posts cost about $0.001 in vision plus ~3k Jev input
+tokens and take 35–50 s, most of it model latency (vision 4–15 s per step,
+Jev 0.7–1.2 s). Evidence per step: before/after PNG, observations, Jev
+probabilities. Example: Microsoft step 3 shows the "Updates" card with a
+post from 3 days ago under the sign-in overlay.
+
+Observed and fixed during L2:
+- The vision model called LinkedIn's sign-in pop-up a "wall" even when the
+  page behind it was readable, which pushed Jev to STOP on the first step
+  (Amazon: STOP 0.76). The prompt now separates `login_or_access_wall`
+  (content replaced) from `signin_popup_present` (overlay on content), Jev
+  gets a facts header, and a STOP that contradicts the facts is re-asked once
+  with the reason. Amazon then went STOP 0.65 → SCROLL 0.77 and found a post.
+- Public company pages expose no Posts/Activity link logged out, so
+  `CLICK_ACTIVITY` was never offered; posts are reached by scrolling to the
+  "Updates" section. Apple's public page has no such section.
+- Individual profile URLs never get past the landing check (authwall), so the
+  loop makes no model calls there.
+
 ## Blockers / needs
 
 - Deep's approved URL list (the pages above were ad-hoc tests, not client targets).

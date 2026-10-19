@@ -11,6 +11,28 @@ database or default scraping path. Measured results for 2026-10-19 are in
 | 1 | `probe_browser.py` | the stealth browser loads a page and we get a screenshot + block/login-wall verdict | nothing (browser is cached locally) |
 | 2 | `probe_vision.py` | a vision model turns that screenshot into structured observations | `OPENROUTER_API_KEY` |
 | 3 | `probe_jev.py` | Jev picks one bounded action from the observations | `TYPESAFE_API_KEY` |
+| L2 | `loop.py` | the whole loop: screenshot → vision → Jev → act → screenshot → verify, with hard budgets and a trace | both keys |
+
+## The loop (L2)
+
+`loop.py` opens one URL and repeats: viewport screenshot → Gemini observations
+→ Jev chooses one action from those actually available on the page
+(`SCROLL`, `CLICK_ACTIVITY` if a Posts/Activity link is visible, `CLOSE_POPUP`
+if a dismiss button is visible, `BACK`, `STOP`) → the browser executes it →
+new screenshot → progress check (URL, scroll position, screenshot hash).
+
+Stops on: posts visible (goal), a login wall / CAPTCHA / block, Jev choosing
+STOP, two steps without change, or the budgets (`--max-steps 8`,
+`--budget-s 180`, `--max-model-calls 16`). Jev sees a one-line facts header
+(wall / pop-up / posts visible / scroll %) above the page text; a STOP that
+contradicts those facts is sent back once with the reason, and Jev's second
+answer stands. Every step is written to `trace.json` with the before/after
+PNGs, the full vision observations, Jev's probabilities and confidence,
+latency and cost.
+
+```powershell
+python scripts/visual_probe/loop.py https://www.linkedin.com/company/microsoft/ --seed 7
+```
 
 ## Browser choice
 
