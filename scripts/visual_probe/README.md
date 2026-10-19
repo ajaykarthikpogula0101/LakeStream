@@ -105,6 +105,35 @@ Outputs land in `data/visual_probe/<timestamp>/` (gitignored). Keys are read
 from the environment or the repo `.env` (gitignored). Records never contain
 keys or proxy credentials.
 
+## Inside LakeStream (L5)
+
+The same loop is available as an optional fetch tier, off by default:
+
+```env
+ENABLE_VISUAL_FETCHER=true
+OPENROUTER_API_KEY=...
+TYPESAFE_API_KEY=...
+```
+
+Then either path through the existing API:
+
+```bash
+# one URL, synchronous: markdown + facts
+curl -X POST http://localhost:8000/api/scrape/url -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"url": "https://www.linkedin.com/company/microsoft/", "tier": "visual"}'
+
+# queued job: facts land in scraped_data as an EXTRACTED record (metadata.source = "visual")
+curl -X POST http://localhost:8000/api/scrape/execute -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"domain": "www.linkedin.com/company/microsoft", "tier": "visual", "max_pages": 1, "raw_only": true}'
+curl http://localhost:8000/api/export/json/<job_id> -H "Authorization: Bearer $TOKEN"
+```
+
+`facts.status` is always one of `success`, `partial`, `blocked`, `failed`;
+a wall produces a `blocked` record rather than nothing. The tier is never
+part of escalation: without an explicit `tier: "visual"` nothing changes.
+
 ## Rules baked in
 
 - A login wall, real challenge page or 403/429/503/999 is recorded as

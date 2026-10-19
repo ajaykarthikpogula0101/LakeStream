@@ -200,7 +200,10 @@ async def execute(page, decision: str, state: dict) -> str:
 
 
 async def run(url: str, out_dir: Path, *, seed: int | None, headless: bool, vision_model: str,
-              max_steps: int, budget_s: float, max_model_calls: int) -> dict:
+              max_steps: int, budget_s: float, max_model_calls: int,
+              html_sink: dict | None = None) -> dict:
+    """Run the loop; ``html_sink["html"]`` receives the latest page HTML when given
+    (the LakeStream fetcher needs it; the trace file deliberately omits it)."""
     from invisible_playwright.async_api import InvisiblePlaywright
 
     openrouter_key = probe_vision._api_key()
@@ -228,6 +231,8 @@ async def run(url: str, out_dir: Path, *, seed: int | None, headless: bool, visi
             except Exception:
                 pass
             html = await page.content()
+            if html_sink is not None:
+                html_sink["html"] = html
             outcome, signals = probe_browser.classify(
                 resp.status if resp else 0, page.url, await page.title(), html
             )
@@ -351,6 +356,8 @@ async def run(url: str, out_dir: Path, *, seed: int | None, headless: bool, visi
                 after_png.write_bytes(after_bytes)
                 after_url, after_scroll = page.url, await page.evaluate("window.scrollY")
                 html = await page.content()
+                if html_sink is not None:
+                    html_sink["html"] = html
                 outcome, signals = probe_browser.classify(200, after_url, await page.title(), html)
                 step["after"] = {"url": after_url, "scroll_y": after_scroll, "png": after_png.name,
                                  "sha": _sha(after_bytes), "classify": outcome, "signals": signals}

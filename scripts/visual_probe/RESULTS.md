@@ -142,6 +142,33 @@ price are known. MiroFish (github.com/666ghj/MiroFish) was suggested as a
 substitute; it is a multi-agent prediction/simulation engine, not a proxy
 or IP service, so it does not apply to this task.
 
+## L5: wired into LakeStream as an optional tier
+
+Changes (all additive, default behaviour untouched):
+
+| Where | What |
+|---|---|
+| `src/models/scraping.py` | `ScrapingTier.VISUAL`; optional `FetchResult.facts` |
+| `src/scraping/fetcher/lake_visual_fetcher.py` | new fetcher wrapping the L2/L3 probe; returns a normal `FetchResult` plus `facts` with status `success` / `partial` / `blocked` / `failed` |
+| `src/scraping/fetcher/factory.py` | registers the tier; never added to `escalation.py`, so only an explicit job `tier: "visual"` reaches it |
+| `src/config/settings.py`, `.env.example` | `enable_visual_fetcher=false` (default), `typesafe_api_key`, model and budget knobs |
+| `src/workers/content_worker.py` | facts stored as one `EXTRACTED` record next to the page record; a wall is stored as an explicit `blocked` record |
+| `src/services/scraper.py`, `src/api/routes/scrape.py` | `POST /scrape/url` returns `facts` alongside markdown |
+| `tests/unit/scraping/test_visual_fetcher.py`, `tests/unit/workers/test_content_worker_visual.py`, `tests/fixtures/visual/` | 14 tests, no browser or network: flag off, success with citations, wall → blocked, missing fields null, loop error → failed, factory mapping, fixture classification, worker record handling, other tiers unchanged |
+
+`tests/unit/scraping` + `tests/unit/workers`: HEAD 134 passed → branch 148 passed.
+
+Live, 2026-10-19 evening, API + arq worker on the laptop against Dockerised Postgres/Redis, `ENABLE_VISUAL_FETCHER=true`:
+
+- `POST /api/scrape/url {"url": ".../company/microsoft/", "tier": "visual"}` → HTTP 200 in 49 s: `tier_used: visual`, markdown of the page, `facts.status: success`, 3 steps, 5 model calls, $0.0011 vision, name "Microsoft", location "Redmond, Washington", one cited post (date "4d", source URL, `step_3.before.png`); evidence under `data/screenshots/visual/<url-hash>/<ts>/` with `trace.json`.
+- `POST /api/scrape/execute {"domain": "www.linkedin.com/company/microsoft", "tier": "visual", "max_pages": 1}` → job `completed` in 132 s; `GET /api/export/json/{job_id}` returns 4 records: `page` + `extracted` (status success, 2 posts, location) for the company URL, and `page` + `extracted` (status partial, "max steps") for a second URL the domain mapper discovered (LinkedIn's user-agreement page).
+
+Caveats found while wiring it in:
+- A job runs every discovered URL through the override tier; the mapper adds a homepage fallback even at `max_pages: 1`, so the visual tier spent 8 steps on a legal page. For now use the tier on explicit single URLs (`/scrape/url`) or seed lists where every URL is a target; a per-URL allow-list is the next step.
+- The probe modules still live in `scripts/visual_probe` and are imported from there by the fetcher; promoting them to `src/scraping/visual/` is a follow-up once the approach is accepted.
+- Environment: `uv pip install -e .[dev]` resolves selectolax 1.x, whose `selectolax.parser` import now raises; the repo pins only `>=0.3.0`. Pinned `<1.0` locally; the pin should move into `pyproject.toml`/`requirements.txt`.
+- `Settings` forbids unknown env keys: any stray key in `.env` makes every `get_settings()` call fail (and the app with it). Keep `.env` to known keys.
+
 ## Blockers / needs
 
 - Deep's approved URL list (the pages above were ad-hoc tests, not client targets).
