@@ -135,6 +135,19 @@ anyIP trial details have not arrived, so only the direct leg ran
 | example.com | ok, 200 | 12.5 s | 1.0 s | 2 KB | not_configured |
 | linkedin.com/company/microsoft | ok, 200 | 19.3 s | 10.3 s | 525 KB | not_configured |
 
+Exit-address check added 2026-10-20 (`l4_20261020_222220`): each leg first opens an IP-echo page in the
+same kind of session, then looks the address up (ISP, ASN, hosting/proxy flags via ip-api.com, country
+from the local GeoIP file as fallback). Direct leg from this laptop: **residential ISP (E Net
+Entertainment, AS135188), Andhra Pradesh, India, hosting=false, proxy-flag=false**. That is what LinkedIn
+sees today and why its public company pages render; a datacenter exit would carry `hosting=true` and is
+the usual reason for challenges. The proxy leg will show the same fields for the anyIP session, so the
+comparison is like-for-like: residential vs residential, or residential vs datacenter.
+
+| Leg | Exit | Country / region | ISP / ASN | Hosting | example.com | linkedin.com/company/microsoft |
+|---|---|---|---|---|---|---|
+| direct | masked | India / Andhra Pradesh | E Net Entertainment / AS135188 | no | ok, 200, 19.3 s (load 1.1 s) | ok, 200, 19.2 s (load 3.1 s), 470 KB |
+| proxy | not configured | – | – | – | – | – |
+
 `proxy_compare.py` runs the proxy leg as soon as `VISUAL_PROBE_PROXY_*` is
 set: one sticky session, same seed, same pace, cost floor from HTML bytes.
 Cost per successful profile via proxy: **unknown** until a provider and
