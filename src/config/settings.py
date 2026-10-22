@@ -103,6 +103,10 @@ class Settings(BaseSettings):
     playwright_session_ttl_seconds: int = 3600  # Session expiration (1 hour)
     playwright_headless: bool = True  # False for debugging
     playwright_timeout_ms: int = 30000  # Page load timeout (30 seconds)
+    # Drop images, media, fonts, beacons and ad/analytics/tracker requests in the
+    # Playwright fetchers. Scripts, XHR and stylesheets still load, so the DOM the
+    # parsers read is unchanged. Visuals are kept when a screenshot is requested.
+    playwright_block_resources: bool = True
     linkedin_session_cookies: str = ""  # Pre-authenticated cookies as JSON
 
     # --- LakeStream v2 feature flags (additive; safe defaults) ---

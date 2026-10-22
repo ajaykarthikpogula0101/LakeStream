@@ -8,6 +8,7 @@ from src.config.constants import TIER_COSTS
 from src.config.settings import get_settings
 from src.models.scraping import FetchOptions, FetchResult, ScrapingTier
 from src.scraping.fetcher.base import BaseFetcher
+from src.scraping.fetcher.resource_blocking import log_block_stats, maybe_install_resource_blocking
 
 log = structlog.get_logger()
 
@@ -81,6 +82,7 @@ class LakePlaywrightFetcher(BaseFetcher):
 
                     # Navigate to URL
                     page = await context.new_page()
+                    block_stats = await maybe_install_resource_blocking(page, settings, options)
                     timeout = options.timeout if options.timeout is not None else settings.playwright_timeout_ms
                     response = await page.goto(url, timeout=timeout)
 
@@ -107,6 +109,7 @@ class LakePlaywrightFetcher(BaseFetcher):
                     html = await page.content()
                     status_code = response.status if response else 0
                     resp_headers = await response_headers(response)
+                    log_block_stats(block_stats, url, domain)
 
                     # Save updated session (cookies may have changed)
                     updated_storage_state = await context.storage_state()
