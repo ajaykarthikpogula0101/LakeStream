@@ -107,6 +107,13 @@ class Settings(BaseSettings):
     # Playwright fetchers. Scripts, XHR and stylesheets still load, so the DOM the
     # parsers read is unchanged. Visuals are kept when a screenshot is requested.
     playwright_block_resources: bool = True
+    # When a page refuses the normal browser (403/429/503, "Access Denied",
+    # "Just a moment...", captcha), retry it with stronger stealth browsers before
+    # giving up. Engines, in order: invisible_firefox, scrapling. See
+    # src/scraping/fetcher/stealth_fallback.py.
+    playwright_stealth_fallback: bool = True
+    playwright_stealth_engines: str = "invisible_firefox,scrapling"
+    playwright_challenge_wait_s: int = 30  # how long to let a bot-check page clear
     linkedin_session_cookies: str = ""  # Pre-authenticated cookies as JSON
 
     # --- LakeStream v2 feature flags (additive; safe defaults) ---
