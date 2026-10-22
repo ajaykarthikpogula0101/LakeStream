@@ -157,7 +157,10 @@ class Settings(BaseSettings):
     enable_credit_enforcement: bool = False
     free_monthly_credits: int = 5000
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    # extra="ignore": a .env shared across branches may hold keys another branch
+    # declares (e.g. TYPESAFE_API_KEY from the visual-probe branch). Unknown keys are
+    # skipped instead of failing validation and crashing every import of settings.
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     @model_validator(mode="after")
     def fix_postgres_scheme(self) -> "Settings":
