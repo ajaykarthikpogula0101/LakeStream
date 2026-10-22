@@ -11,7 +11,7 @@ def test_unknown_env_file_keys_are_ignored(tmp_path):
     )
     s = Settings(_env_file=env)
     assert s.playwright_timeout_ms == 12345
-    assert not hasattr(s, "typesafe_api_key")
+    assert not hasattr(s, "some_new_flag")  # a key no branch declares
 
 
 def test_known_env_file_keys_still_apply(tmp_path):
