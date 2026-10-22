@@ -7,6 +7,8 @@ redis[hiredis]>=5.0.0
 pydantic[email]>=2.10.0
 pydantic-settings>=2.6.0
 playwright>=1.49.0
+# Stealth retry for refused pages (src/scraping/fetcher/stealth_fallback.py)
+invisible-playwright>=0.40.0
 httpx>=0.28.0
 selectolax>=0.3.0
 structlog>=24.4.0

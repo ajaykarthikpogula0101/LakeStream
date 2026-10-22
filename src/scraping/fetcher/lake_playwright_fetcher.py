@@ -7,6 +7,7 @@ from playwright.async_api import async_playwright
 from src.config.constants import TIER_COSTS
 from src.config.settings import get_settings
 from src.models.scraping import FetchOptions, FetchResult, ScrapingTier
+from src.scraping.fetcher import stealth_fallback
 from src.scraping.fetcher.base import BaseFetcher
 from src.scraping.fetcher.resource_blocking import log_block_stats, maybe_install_resource_blocking
 
@@ -152,6 +153,20 @@ class LakePlaywrightFetcher(BaseFetcher):
             captcha = False  # no HTML to scan on error
             screenshot_bytes = None
             resp_headers = {}
+
+        # Refused? Give the page a second chance with stronger stealth browsers.
+        if stealth_fallback.should_rescue(status_code, html, blocked, captcha):
+            rescued = await stealth_fallback.rescue(
+                url, settings, screenshot=bool(options.capture_screenshot),
+            )
+            if rescued is not None:
+                html, status_code, resp_headers = rescued.html, rescued.status_code, rescued.headers
+                screenshot_bytes = rescued.screenshot_bytes or screenshot_bytes
+                blocked, captcha = False, False
+        elif blocked or captcha:
+            # Error status or a captcha widget, but the body is the real page (e.g. a
+            # 403 carrying the full content): keep it instead of escalating it away.
+            blocked, captcha = False, False
 
         duration_ms = int((time.time() - start) * 1000)
 

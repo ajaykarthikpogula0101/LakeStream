@@ -11,6 +11,7 @@ from playwright.async_api import async_playwright
 from src.config.constants import TIER_COSTS
 from src.config.settings import get_settings
 from src.models.scraping import FetchOptions, FetchResult, ScrapingTier
+from src.scraping.fetcher import stealth_fallback
 from src.scraping.fetcher.base import BaseFetcher
 from src.scraping.fetcher.resource_blocking import log_block_stats, maybe_install_resource_blocking
 from src.services.proxy_health import (
@@ -243,6 +244,16 @@ class LakePlaywrightProxyFetcher(BaseFetcher):
                     blocked = True
                     captcha = False
                     resp_headers = {}
+
+        # Refused? Retry with stronger stealth browsers through the same proxy.
+        if stealth_fallback.should_rescue(status_code, html, blocked, captcha):
+            rescued = await stealth_fallback.rescue(url, settings, proxy=proxy_config)
+            if rescued is not None:
+                html, status_code, resp_headers = rescued.html, rescued.status_code, rescued.headers
+                blocked, captcha = False, False
+        elif blocked or captcha:
+            # Error status or a captcha widget, but the body is the real page: keep it.
+            blocked, captcha = False, False
 
         duration_ms = int((time.time() - start) * 1000)
 
