@@ -47,7 +47,7 @@ see `DEPLOYMENT.md`.
 | Flag | Default | Effect |
 |------|---------|--------|
 | `ENABLE_CONTENT_PERSISTENCE` | true | store markdown + raw HTML + hash per page |
-| `ENABLE_SCRAPE_CACHE` | true | skip re-extraction of unchanged pages |
+| `ENABLE_SCRAPE_CACHE` | false | when true, skip re-extraction of unchanged pages (off: every page is re-extracted) |
 | `ENABLE_CHANGE_MONITORING` | true | record changes + fire tracked-domain webhooks |
 | `ENABLE_SCREENSHOTS` | false | allow per-page screenshots (opt-in per job) |
 | `ENABLE_GO_FETCHERS` | true | make the `go_http` / `go_browser` tiers available |

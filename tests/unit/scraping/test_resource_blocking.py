@@ -329,3 +329,46 @@ async def test_screenshot_requests_keep_images_but_still_drop_trackers(monkeypat
     assert result.status_code == 200
     assert "/logo.png" in first.hits
     assert tracker.hits == []
+
+
+# ---------------------------------------------------------------- contact parser: visible text only
+def test_contact_parser_ignores_emails_hidden_in_scripts():
+    html = """<html><body>
+    <script>window.cfg = {"dsn": "https://3d1e0e6b0f934f46bb8915f9c81ee308@www.semrush.com/1"}</script>
+    <script>snaptr('init', 'x', {'user_email': 'colin.chang@zoominfo.com'})</script>
+    <noscript><img src="https://px.test/?e=hidden.person@acme.test"></noscript>
+    <style>/* owner: style.person@acme.test */</style>
+    <p>Talk to our team: <a href="mailto:priya.raman@acme.test?subject=Hi">Priya</a></p>
+    <p>Or write to ana.silva@acme.test for partnerships.</p>
+    </body></html>"""
+    people = ContactParser(html, "https://acme.test/contact").extract_people()
+    emails = sorted(p["email"] for p in people if p.get("email"))
+    assert emails == ["ana.silva@acme.test", "priya.raman@acme.test"]
+
+
+def test_contact_parser_still_reads_json_ld_inside_scripts():
+    html = """<html><body>
+    <script type="application/ld+json">{"@type": "Person", "name": "Priya Raman",
+      "jobTitle": "Head of Sales", "email": "priya.raman@acme.test"}</script>
+    <script>var junk = "fake.person@tracker.test";</script>
+    </body></html>"""
+    people = ContactParser(html, "https://acme.test/team").extract_people()
+    assert [(p["first_name"], p["last_name"], p["source"]) for p in people] == [
+        ("Priya", "Raman", "json_ld")
+    ]
+
+
+def test_contact_parser_does_not_glue_words_across_tags():
+    html = "<html><body><p>mail john.doe@acme.test</p><p>Call us today</p></body></html>"
+    people = ContactParser(html, "https://acme.test/").extract_people()
+    assert [p["email"] for p in people] == ["john.doe@acme.test"]
+
+
+def test_contact_parser_reads_visible_linkedin_profile_links_not_hidden_ones():
+    html = """<html><body>
+    <script>var team = ["https://www.linkedin.com/in/hidden-only-in-script"];</script>
+    <p>Our CEO <a href="https://www.linkedin.com/in/hschuck/">Henry</a></p>
+    </body></html>"""
+    people = ContactParser(html, "https://acme.test/about").extract_people()
+    urls = [p["linkedin_url"] for p in people if p.get("linkedin_url")]
+    assert urls == ["https://www.linkedin.com/in/hschuck"]

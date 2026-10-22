@@ -113,8 +113,10 @@ class Settings(BaseSettings):
     lakestream_version: str = "v2"
     # Persist clean markdown + raw HTML + content_hash per page (Phase 1)
     enable_content_persistence: bool = True
-    # Skip re-extraction when a page's content_hash is unchanged (Phase 2)
-    enable_scrape_cache: bool = True
+    # Skip re-extraction when a page's content_hash is unchanged (Phase 2).
+    # Off by default: every fetch re-runs extraction so results always come from
+    # the latest parsers. The hash is still stored and changes still recorded.
+    enable_scrape_cache: bool = False
     # Record content changes and fire change webhooks (Phase 2)
     enable_change_monitoring: bool = True
     # Capture page screenshots when requested (Phase 3; heavier, opt-in)

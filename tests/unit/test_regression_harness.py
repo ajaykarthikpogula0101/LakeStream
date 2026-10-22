@@ -360,3 +360,16 @@ async def test_blocked_fetch_extracts_nothing_and_touches_no_cache(worker_env, m
     w.fetch_page = _blocked
     assert await _process(w) == []
     assert w.pricing_calls == 0 and worker_env.store.upserts == 0 and w.exported == []
+
+
+async def test_default_settings_extract_unchanged_pages_every_time(worker_env):
+    """Product decision (22 Oct): extraction runs on every fetch by default."""
+    default = settings_mod.Settings.model_fields["enable_scrape_cache"].default
+    assert default is False
+    worker_env.flags["enable_scrape_cache"] = default
+    page = {"html": GOOD_PAGE}
+    await _process(worker_env(page))
+    w = worker_env(page)
+    await _process(w)
+    assert w.pricing_calls == 1  # unchanged page, still extracted
+    assert w.changes == []  # and still no false change event

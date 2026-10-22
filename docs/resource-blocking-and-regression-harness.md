@@ -96,15 +96,21 @@ blocking removes, not lost content:
   inline script loaded through Google Tag Manager.
 - zoominfo.com: an email inside a Snap pixel script that Tag Manager injects.
 
-Side finding: `ContactParser._from_email_patterns` reads text inside `<script>`
-tags, which is how it picked those up. Worth a separate fix (scan visible text only).
+**Fixed (22 Oct, Ajay's request): contact parser reads only real contact data.**
+`ContactParser` used to scan text inside `<script>` tags, which is how it picked
+those up. It now scans only text a visitor can see (`script`, `style`, `noscript`,
+`template`, `svg` stripped) plus the targets of visible `mailto:` and
+`linkedin.com/in/` links. JSON-LD `Person` data is still read from its script tag.
+Words from separate tags are no longer glued together. After the fix, zoominfo.com
+returns only the real CEO LinkedIn profile, with blocking on and off; the fake
+email is gone. 5 tests in `tests/unit/scraping/test_resource_blocking.py`.
 
 Reproduce: `python benchmarks/resource_blocking_bench.py`. Results are written to
 `data/bench/` (git-ignored; only numbers, no page content).
 
 ## Day 2: regression harness
 
-`tests/unit/test_regression_harness.py`, 16 tests, no DB / Redis / network.
+`tests/unit/test_regression_harness.py`, 17 tests, no DB / Redis / network.
 Fetchers and the `page_content` table are in-memory fakes; everything else is
 production code.
 
@@ -118,11 +124,17 @@ production code.
 Mutation check: making `should_escalate` ignore captchas fails 3 tests; making
 the cache never hit fails 2. Both files were restored afterwards.
 
-**Note for Deep.** The plan says "no re-scrape when `content_hash` is unchanged".
-The code skips re-*extraction*, not the fetch: the hash is computed from the page,
-so the page must be downloaded first. Skipping the fetch itself would need
-conditional requests (ETag / Last-Modified) or a recrawl interval; the harness pins
-today's behaviour so either change is visible.
+**Changed (22 Oct, Ajay's request): unchanged pages are extracted every time.**
+`enable_scrape_cache` now defaults to `false`, so every fetch re-runs extraction,
+even when `content_hash` has not changed. The hash is still stored and real changes
+are still recorded. The skip-on-unchanged shortcut is kept behind the flag
+(`ENABLE_SCRAPE_CACHE=true`); the cache tests above force it on and still pass,
+and `test_default_settings_extract_unchanged_pages_every_time` pins the new default.
+Trade-off: repeated crawls of unchanged pages now pay for extraction again
+(including LLM extraction when a job uses it).
+
+Note: the fetch itself always happened, cache or not, because the hash is computed
+from the downloaded page.
 
 **Bake-off.** `benchmarks/bakeoff/` does not exist on any branch of
 `Champ-Deep/LakeStream` or the fork. The only benchmarks are `benchmarks/lake_benchmark.py`
@@ -133,7 +145,7 @@ bake-off to run yet.
 
 | | before | after |
 |---|---:|---:|
-| unit tests passed | 560 | 616 |
+| unit tests passed | 560 | 621 |
 | failed (pre-existing: `Wappalyzer` package missing in the local venv; CI installs it) | 3 | 3 |
 
 Run from a folder without a `.env`, as CI does; a local `.env` with keys this
